@@ -1,0 +1,16 @@
+core
+a.out
+
+*~
+*.local
+*.o
+*.so
+*.core
+.project
+.paths
+instructions.csv
+scripts/insn
+data/
+tools/pin/
+floppy-tmp
+kernel-tmp
