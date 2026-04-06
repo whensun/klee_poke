@@ -1,0 +1,59 @@
+(*=======================================================================================*)
+(*  This Sail RISC-V architecture model, comprising all files and                        *)
+(*  directories except where otherwise noted is subject the BSD                          *)
+(*  two-clause license in the LICENSE file.                                              *)
+(*                                                                                       *)
+(*  SPDX-License-Identifier: BSD-2-Clause                                                *)
+(*=======================================================================================*)
+
+open import Pervasives
+open import Pervasives_extra
+open import Sail2_instr_kinds
+open import Sail2_values
+open import Sail2_operators_bitlists
+open import Sail2_concurrency_interface
+open import Sail2_monadic_combinators
+
+type bitvector = list Sail2_values.bitU
+
+val load_reservation : forall 'abort 'barrier 'cache_op 'fault 'pa 'tlb_op 'translation_summary 'trans_start 'trans_end 'arch_ak 'rv 'e. bitvector -> monad 'abort 'barrier 'cache_op 'fault 'pa 'tlb_op 'translation_summary 'trans_start 'trans_end 'arch_ak 'rv unit 'e
+let load_reservation addr = return ()
+
+let match_reservation _ = true
+let cancel_reservation () = return ()
+let valid_reservation () = false
+
+val plat_term_write : forall 'abort 'barrier 'cache_op 'fault 'pa 'tlb_op 'translation_summary 'trans_start 'trans_end 'arch_ak 'rv 'e. bitvector -> monad 'abort 'barrier 'cache_op 'fault 'pa 'tlb_op 'translation_summary 'trans_start 'trans_end 'arch_ak 'rv unit 'e
+let plat_term_write _ = return ()
+declare ocaml target_rep function plat_term_write = `Platform.term_write`
+
+val plat_term_read : forall 'abort 'barrier 'cache_op 'fault 'pa 'tlb_op 'translation_summary 'trans_start 'trans_end 'arch_ak 'rv 'e. unit -> monad 'abort 'barrier 'cache_op 'fault 'pa 'tlb_op 'translation_summary 'trans_start 'trans_end 'arch_ak 'rv bitvector 'e
+let plat_term_read () = return []
+declare ocaml target_rep function plat_term_read = `Platform.term_read`
+
+val plat_get_16_random_bits : forall 'abort 'barrier 'cache_op 'fault 'pa 'tlb_op 'translation_summary 'trans_start 'trans_end 'arch_ak 'rv 'e. Register_Value 'rv =>
+  unit -> monad 'abort 'barrier 'cache_op 'fault 'pa 'tlb_op 'translation_summary 'trans_start 'trans_end 'arch_ak 'rv bitvector 'e
+let plat_get_16_random_bits () = choose_bitvector "plat_get_16_random_bits" 16
+declare ocaml target_rep function plat_get_16_random_bits = `Platform.get_16_random_bits`
+
+def sys_enable_experimental_extensions () = false
+
+val shift_bits_right : bitvector -> bitvector -> bitvector
+let shift_bits_right v m = shiftr v (uint m)
+val shift_bits_left : bitvector -> bitvector -> bitvector
+let shift_bits_left v m = shiftl v (uint m)
+
+val print_string : string -> string -> unit
+let print_string msg s = () (* print_endline (msg ^ s) *)
+
+val prerr_string : string -> string -> unit
+let prerr_string msg s = prerr_endline (msg ^ s)
+
+val prerr_bits : string -> bitvector -> unit
+let prerr_bits msg bs = prerr_endline (msg ^ (show_bitlist (bits_of bs)))
+
+val print_bits : string -> bitvector -> unit
+let print_bits msg bs = print_endline (msg ^ (show_bitlist (bits_of bs)))
+
+val print_dbg : string -> unit
+let print_dbg msg = ()

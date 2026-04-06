@@ -1,0 +1,168 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 1.0.0"
+        required: true
+      notes:
+        description: "Release notes"
+        required: false
+      prerelease:
+        description: "Is this a pre-release (beta, RC, etc.)?"
+        required: false
+        type: boolean
+      draft:
+        description: "Is this a draft release (not public; you can publish it later)?"
+        default: true
+        required: false
+        type: boolean
+  schedule:
+    # Weekly on Mondays at 02:35 UTC
+    # The schedule event can be delayed during periods of high loads of GitHub Actions workflow runs.
+    # High load times include the start of every hour. If the load is sufficiently high enough, some queued jobs may be dropped.
+    # To decrease the chance of delay, schedule your workflow to run at a different time of the hour.
+    # https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule
+    - cron: "35 2 * * 1"
+
+permissions:
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - name: Linux-x86_64
+            os: ubuntu-latest
+            container: rockylinux:8.9.20231119
+
+          - name: Linux-aarch64
+            os: ubuntu-24.04-arm
+            container: rockylinux:8.9.20231119
+
+          - name: mac-arm64
+            os: macos-latest
+            container: ""
+
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+
+    env:
+      SAIL_VERSION: "0.20.1"
+      # This helps with reproducible builds by not embedding variable timestamps in files.
+      # This is needed in particular for the Debian package's compressed changelog.
+      # See the comments in `cmake/packaging.cmake`.
+      SOURCE_DATE_EPOCH: "0"
+
+    steps:
+      # This must be before checkout otherwise Github will use a zip of the
+      # code instead of git clone.
+      - name: Install dependencies (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          dnf install -y git
+
+      - name: Check out repository code
+        uses: actions/checkout@v6
+
+      - name: Common setup
+        uses: ./.github/actions/sail-setup
+        with:
+          cmake-version: "3.20.0"
+
+      - name: Build simulator
+        run: |
+          git config --global --add safe.directory '*'
+          cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release -DSTATIC=TRUE -DENABLE_RISCV_TESTS=TRUE -DENABLE_RISCV_VECTOR_TESTS_V128_E32=TRUE
+          cd build
+          ninja all
+          ctest -j2
+          cpack
+
+      - name: Build JSON and HTML
+        if: matrix.name == 'Linux-x86_64'
+        run: |
+          cd build
+          ninja generated_sail_riscv_docs
+
+      - name: "Generate attestations (Linux-x86_64)"
+        if: matrix.name == 'Linux-x86_64'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            build/sail-riscv-*
+            build/model/sail_riscv_model.json
+            build/model/sail_riscv_html.tgz
+
+      - name: "Generate attestations (Linux-aarch64)"
+        if: matrix.name == 'Linux-aarch64'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            build/sail-riscv-*
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.name }}
+          path: |
+            build/sail-riscv-*
+            build/model/sail_riscv_model.json
+            build/model/sail_riscv_html.tgz
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      # Required to create a release.
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+
+      - name: Prepare release inputs
+        id: params
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            SHORT_SHA=${GITHUB_SHA:0:7}
+            TAG="$(date -u +%F)-${SHORT_SHA}"
+            NAME="Weekly Release ${TAG}"
+            PRERELEASE=true
+            DRAFT=false
+            GEN_NOTES=true
+            BODY="Weekly scheduled pre-release for commit ${GITHUB_SHA}."
+          else
+            TAG=${{ inputs.version }}
+            NAME="${TAG}"
+            PRERELEASE=${{ inputs.prerelease }}
+            DRAFT=${{ inputs.draft }}
+            GEN_NOTES=false
+            BODY="${{ inputs.notes }}"
+          fi
+          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "draft=$DRAFT" >> "$GITHUB_OUTPUT"
+          echo "generate_release_notes=$GEN_NOTES" >> "$GITHUB_OUTPUT"
+          echo "body=$BODY" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.params.outputs.name }}
+          tag_name: ${{ steps.params.outputs.tag_name }}
+          body: ${{ steps.params.outputs.body }}
+          generate_release_notes: ${{ steps.params.outputs.generate_release_notes }}
+          prerelease: ${{ steps.params.outputs.prerelease }}
+          draft: ${{ steps.params.outputs.draft }}
+          files: |
+            release-Linux-x86_64/sail-riscv-Linux-x86_64.tar.gz
+            release-Linux-aarch64/sail-riscv-Linux-aarch64.tar.gz
+            release-mac-arm64/sail-riscv-mac-arm64.tar.gz
+            release-Linux-x86_64/model/sail_riscv_model.json
+            release-Linux-x86_64/model/sail_riscv_html.tgz
+          fail_on_unmatched_files: true

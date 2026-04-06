@@ -120,7 +120,13 @@ function setup_basic_ignores() {
 }
 
 function untrack_known_secrets_if_present() {
-    git rm --cached -f qemu/tests/keys/id_rsa 2>/dev/null || true
+    while IFS= read -r file; do
+        case "$file" in
+            */id_rsa|*/id_dsa|*/id_ecdsa|*/id_ed25519|*.pem|*.key)
+                git rm --cached -f "$file" 2>/dev/null || true
+                ;;
+        esac
+    done < <(git ls-files)
 }
 
 function main() {

@@ -1,0 +1,48 @@
+name: Run full tests
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 0"
+  pull_request:
+    # Explicit listing of types is necessary to run the workflow when a label is added
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
+jobs:
+  run-full-tests:
+    # If triggered by a PR event, only run if the 'run-full-tests' label is present
+    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-full-tests') }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        TEST_SUITE:
+          [
+            RISCV_TESTS,
+            RISCV_VECTOR_TESTS_V128_E32,
+            RISCV_VECTOR_TESTS_V128_E64,
+            RISCV_VECTOR_TESTS_V256_E32,
+            RISCV_VECTOR_TESTS_V256_E64,
+            RISCV_VECTOR_TESTS_V512_E32,
+            RISCV_VECTOR_TESTS_V512_E64,
+          ]
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v6
+        with:
+          # Git history is needed for `git describe` in the build to work.
+          fetch-depth: 0
+      - name: Common setup
+        uses: ./.github/actions/sail-setup
+        with:
+          install-clang: "true"
+      - name: Build simulator
+        run: |
+          cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_${{ matrix.TEST_SUITE }}=TRUE
+          ninja -C build all
+      - name: Run tests
+        run: |
+          ctest --test-dir build --output-on-failure

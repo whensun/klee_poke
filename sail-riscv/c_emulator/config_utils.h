@@ -1,0 +1,19 @@
+#pragma once
+
+#include <cstdint>
+#include <jsoncons/json.hpp>
+#include <string>
+#include <vector>
+
+// Get a uint64_t from the JSON config file. This works with integers and
+// non-abstract bit vectors. Bit vectors over 64 bits throw an exception.
+// Integers over 64 bits are currently silently truncated, and the sign
+// is ignored (-3 will be read as 3).
+uint64_t get_config_uint64(const std::vector<const char *> &keypath);
+
+const char *get_default_config();
+const char *get_default_rv32_config();
+
+const char *get_config_schema();
+
+void validate_config_schema(const jsoncons::json &json_config, const std::string &source_desc);

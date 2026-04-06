@@ -1,0 +1,105 @@
+\documentclass[tikz]{standalone}
+
+\usepackage{tikz}
+\usetikzlibrary{calc,positioning,backgrounds}
+
+\begin{document}
+\begin{tikzpicture}[
+    % these two lines are needed for the svg to receive a filled background.
+    background rectangle/.style={rounded corners,fill=gray!20},
+    framed,
+    % general settings
+    node distance=5mm,
+    align=center,
+    % nodes
+    base/.style={rectangle, rounded corners=3mm, minimum size=10mm, thick, draw=black,fill=white},
+    cmodel/.style={base, fill=green!30},
+    sail/.style={base, fill=cyan!40},
+    c/.style={base},
+    csail/.style={base,fill=cyan!20},
+    cfg/.style={base,double=teal!50, double distance=0.25em},
+    schema/.style={base,fill=violet!20},
+    % arrows
+    dep/.style={black, very thick},
+    gen/.style={blue, very thick},
+    valid/.style={purple, very thick},
+  ]
+
+  \pgfdeclarelayer{background}
+  \pgfdeclarelayer{arrows} % arrows directly on the background layer don't seem to show
+  \pgfsetlayers{background,arrows,main}
+
+  \pgfonlayer{main}
+
+  \node (cmodel)     [cmodel]                        {\textbf{C++ translation}\\
+                                                         \texttt{sail\_riscv\_model.\{h,cpp\}}};
+
+  \node (csim)       [c, above left=of cmodel]       {\textbf{C++ Simulator}\\
+                                                         \texttt{sail\_riscv\_sim}\\
+                                                         command line options\\
+                                                         initialization\\
+                                                         exit code};
+
+  \coordinate (smloc) at ($(cmodel)+(0,4.5)$);
+  \node (sailmodel)  [sail] at (smloc)               {\textbf{Sail model}\\
+                                                         \texttt{*.sail}};
+
+  \node (plat)       [c, below right=of cmodel]      {\textbf{C++ platform interface}\\
+                                                         \texttt{riscv\_platform\_if.\{h,cpp\}}\\
+                                                         handler declarations};
+
+  \node (cfg)        [cfg, above=of plat]            {\textbf{Model configuration}\\
+                                                         ISA options\\
+                                                         memory map\\
+                                                         enabled extensions};
+
+  \node (schema)     [schema, above=of cfg]          {\textbf{Configuration Schema}\\
+                                                         \texttt{sail\_riscv\_config\_schema.json}\\
+                                                         legal configuration values};
+
+  \node (callbacks)  [c, below=of plat]              {\textbf{Callbacks}\\
+                                                         \texttt{callbacks.sail}\\
+                                                         \texttt{riscv\_callbacks\_if.\{h,cpp\}}\\
+                                                         state-change callbacks};
+
+  \node (platimpl)   [c, below=of callbacks]         {\textbf{C++ platform implementation}\\
+                                                         \texttt{riscv\_model\_impl.\{h,cpp\}}\\
+                                                         handler implementations};
+
+  \coordinate (log)  at ($(csim |- callbacks)$);
+  \node (logging)    [c] at (log)                    {\textbf{Execution Trace}\\
+                                                         \texttt{riscv\_callbacks\_log.\{h,cpp\}}\\
+                                                         log callbacks};
+
+  \coordinate (clib) at ($(cmodel)!1.5!(cmodel |- platimpl)$);
+  \node (csail)      [csail]  at (clib)              {\textbf{C Sail library}\\
+                                                         \texttt{sail,rts}\\
+                                                         Sail values\\
+                                                         raw memory};
+
+  \endpgfonlayer
+
+  \pgfonlayer{arrows}
+
+  \draw[->,gen]  (sailmodel) edge                    (cmodel)
+                             edge                    (schema);
+
+  \draw[->,valid] (schema)   edge                    (cfg);
+
+  \draw[->,dep]  (cmodel)    edge                    (plat)
+                             edge                    (csail)
+                             edge                    (cfg);
+
+  \draw[->,dep]  (platimpl)  edge                    (csail)
+                             edge                    (callbacks);
+
+  \draw[->,dep]  (logging)   edge                    (callbacks);
+
+  \draw[->,dep]  (csim)      edge                    (cmodel)
+                             edge [out=-90,in=180]   (platimpl)
+                             edge [out=-90,in=135]   (csail)
+                             edge                    (logging);
+
+  \endpgfonlayer
+\end{tikzpicture}
+\end{document}
